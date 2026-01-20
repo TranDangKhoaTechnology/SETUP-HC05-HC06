@@ -1,0 +1,12 @@
+{
+  "slave_addr_colon": "98D3:02:961394",
+  "slave_addr_comma": "98D3,02,961394",
+  "meta": {
+    "port": "COM3",
+    "pin": "1234",
+    "baud": 115200,
+    "name_slave": "admin",
+    "mode": "one"
+  },
+  "timestamp": "2026-01-20T23:39:13"
+}
