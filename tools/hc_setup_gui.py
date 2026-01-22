@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Bản quyền (c) 2026 Trần Đăng Khoa (TranDangKhoaTechnology).
+# Phát hành theo MIT License; xem README.md và LICENSE để biết chi tiết.
 """
 Tkinter GUI for HC-05 / HC-06 setup, reusing hc_core logic.
 
@@ -54,6 +56,13 @@ class SetupApp:
         self.root.title("HC-05 / HC-06 Setup Wizard")
         self.root.geometry("820x640")
 
+        # Menubar (About) so bản quyền luôn xem được
+        menubar = tk.Menu(self.root)
+        help_menu = tk.Menu(menubar, tearoff=False)
+        help_menu.add_command(label="About", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        self.root.config(menu=menubar)
+
         self.log_queue: queue.Queue[str] = queue.Queue()
         self.worker: Optional[threading.Thread] = None
         self.stop_event: Optional[threading.Event] = None
@@ -65,9 +74,13 @@ class SetupApp:
         self._setup_body: Optional[ttk.Frame] = None
         self._pair_canvas: Optional[tk.Canvas] = None
         self._pair_body: Optional[ttk.Frame] = None
+        self._paned: Optional[ttk.Panedwindow] = None
+        self._pane_split_set = False
 
         self._build_ui()
         self._bind_global_mousewheel()
+        # Defer split until layout is realized to avoid bottom pane taking all space on small windows.
+        self.root.after_idle(self._set_default_pane_split)
 
         self.refresh_ports()
         self._update_mode_state()
@@ -121,10 +134,11 @@ class SetupApp:
         Create a scrollable area (canvas + vertical scrollbar) inside a tab.
         Returns (canvas, inner_frame).
         """
-        outer = ttk.Frame(parent)
+        outer = ttk.Frame(parent, style="Content.TFrame")
         outer.pack(fill="both", expand=True)
 
-        canvas = tk.Canvas(outer, highlightthickness=0)
+        panel_bg = (getattr(self, "_palette", {}) or {}).get("PANEL", "#ffffff")
+        canvas = tk.Canvas(outer, highlightthickness=0, background=panel_bg, borderwidth=0)
         vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vsb.set)
 
@@ -206,10 +220,104 @@ class SetupApp:
     # UI build
     # -------------------------
     def _build_ui(self) -> None:
-        main = ttk.Frame(self.root, padding=10)
+        # Light palette with gentle contrast
+        BG = "#f8fafc"
+        PANEL = "#eef2f6"
+        PANEL_2 = "#e2e8f0"
+        FG = "#000000"
+        FG_MUTED = "#1f2937"
+        ACCENT = "#2563eb"
+        ACCENT_DARK = "#1d4ed8"
+        # make available to helper methods
+        self._palette = {"BG": BG, "PANEL": PANEL, "PANEL_2": PANEL_2, "FG": FG, "ACCENT": ACCENT, "ACCENT_DARK": ACCENT_DARK}
+
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        # Base
+        style.configure("TFrame", background=BG)
+        style.configure("Main.TFrame", background=BG)
+        style.configure("Content.TFrame", background=PANEL)
+        style.configure("TLabel", background=BG, foreground=FG, font=("Segoe UI", 10))
+        style.configure("Status.TLabel", background=BG, foreground=ACCENT_DARK, font=("Segoe UI Semibold", 10))
+        style.configure("Footer.TFrame", background="#e2e8f0")
+        style.configure("Footer.TLabel", background="#e2e8f0", foreground="#000000", font=("Segoe UI Semibold", 9))
+
+        # Buttons
+        style.configure(
+            "TButton",
+            padding=8,
+            background=ACCENT,
+            foreground="#ffffff",
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#3b82f6"), ("disabled", PANEL_2)],
+            foreground=[("disabled", FG_MUTED)],
+        )
+        style.configure("Accent.TButton", padding=8)
+
+        # Notebook
+        style.configure("TNotebook", background=BG, borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background=PANEL,
+            foreground=FG_MUTED,
+            padding=(12, 8),
+            font=("Segoe UI Semibold", 10),
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", PANEL_2), ("active", PANEL_2)],
+            foreground=[("selected", FG), ("active", FG)],
+        )
+
+        # Labelframe
+        style.configure("TLabelframe", background=PANEL, borderwidth=0)
+        style.configure("TLabelframe.Label", background=PANEL, foreground=FG, font=("Segoe UI Semibold", 10))
+
+        # Inputs
+        style.configure(
+            "TCombobox",
+            fieldbackground="#ffffff",
+            background="#ffffff",
+            foreground=FG,
+            selectbackground=ACCENT_DARK,
+            selectforeground="#ffffff",
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", "#ffffff"), ("!disabled", "#ffffff")],
+            foreground=[("disabled", "#94a3b8")],
+        )
+        style.configure("TCheckbutton", background=PANEL, foreground=FG, font=("Segoe UI", 10))
+        style.map(
+            "TCheckbutton",
+            foreground=[("disabled", FG), ("active", FG), ("!disabled", FG)],
+            background=[("disabled", PANEL_2), ("active", PANEL), ("!disabled", PANEL)],
+        )
+
+        self.root.configure(bg=BG)
+
+        main = ttk.Frame(self.root, padding=10, style="Main.TFrame")
         main.pack(fill="both", expand=True)
 
-        self.notebook = ttk.Notebook(main)
+        # Split main area so user can drag to resize bottom log/status/footer.
+        paned = ttk.Panedwindow(main, orient="vertical")
+        paned.pack(fill="both", expand=True)
+        self._paned = paned
+        top_frame = ttk.Frame(paned)
+        bottom_frame = ttk.Frame(paned)
+        paned.add(top_frame, weight=3)
+        paned.add(bottom_frame, weight=2)
+        paned.bind("<Configure>", self._on_paned_configure)
+
+        self.notebook = ttk.Notebook(top_frame)
         self.notebook.pack(fill="both", expand=True)
 
         self.setup_tab = ttk.Frame(self.notebook)
@@ -301,7 +409,16 @@ class SetupApp:
         plan_inner = ttk.Frame(plan_box)
         plan_inner.pack(fill="both", expand=True)
 
-        self.plan_text = tk.Text(plan_inner, height=9, wrap="none", state="disabled")
+        self.plan_text = tk.Text(
+            plan_inner,
+            height=9,
+            wrap="none",
+            state="disabled",
+            bg="#ffffff",
+            fg="#000000",
+            insertbackground="#2563eb",
+            relief="flat",
+        )
         plan_vsb = ttk.Scrollbar(plan_inner, orient="vertical", command=self.plan_text.yview)
         plan_hsb = ttk.Scrollbar(plan_inner, orient="horizontal", command=self.plan_text.xview)
         self.plan_text.configure(yscrollcommand=plan_vsb.set, xscrollcommand=plan_hsb.set)
@@ -470,13 +587,22 @@ class SetupApp:
         # Shared status + log (outside scroll tabs)
         # =========================
         self.status_var = tk.StringVar(value="Idle")
-        self.status_label = ttk.Label(main, textvariable=self.status_var, foreground="blue")
+        self.status_label = ttk.Label(bottom_frame, textvariable=self.status_var, foreground="#2563eb", style="Status.TLabel")
         self.status_label.pack(anchor="w", pady=(6, 4))
 
-        log_frame = ttk.Frame(main)
+        log_frame = ttk.Frame(bottom_frame, style="Content.TFrame")
         log_frame.pack(fill="both", expand=True)
 
-        self.log_text = tk.Text(log_frame, height=14, wrap="none", state="disabled", bg="#f6f6f6")
+        self.log_text = tk.Text(
+            log_frame,
+            height=14,
+            wrap="none",
+            state="disabled",
+            bg="#ffffff",
+            fg="#000000",
+            insertbackground="#2563eb",
+            relief="flat",
+        )
         vsb = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         hsb = ttk.Scrollbar(log_frame, orient="horizontal", command=self.log_text.xview)
         self.log_text.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -486,6 +612,62 @@ class SetupApp:
         hsb.grid(row=1, column=0, sticky="ew")
         log_frame.rowconfigure(0, weight=1)
         log_frame.columnconfigure(0, weight=1)
+
+        # Footer: copyright and license info
+        # Global footer (kept outside paned so luôn hiển thị)
+        footer = ttk.Frame(main, style="Footer.TFrame")
+        footer.pack(fill="x", pady=(6, 0))
+        ttk.Separator(footer, orient="horizontal").pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            footer,
+            text="© 2026 Trần Đăng Khoa (TranDangKhoaTechnology) • MIT License (xem README.md / LICENSE)",
+            style="Footer.TLabel",
+        ).pack(anchor="w", padx=8, pady=(0, 4))
+
+    def _show_about(self) -> None:
+        msg = (
+            "HC-05 / HC-06 Setup Wizard\n"
+            "© 2026 Trần Đăng Khoa (TranDangKhoaTechnology)\n"
+            "Phát hành theo MIT License. Xem README.md và LICENSE để biết chi tiết."
+        )
+        self._show_info("About", msg)
+
+    def _set_default_pane_split(self) -> None:
+        """Set initial split so bottom pane is ~1/3 height; only run once."""
+        if self._pane_split_set or self._paned is None:
+            return
+        self.root.update_idletasks()
+        total = self._paned.winfo_height()
+        if total <= 40:
+            # Try again shortly if geometry not ready.
+            self.root.after(80, self._set_default_pane_split)
+            return
+        top_height = int(total * (2 / 3))
+        try:
+            self._paned.sashpos(0, top_height)
+            self._pane_split_set = True
+        except tk.TclError:
+            self.root.after(80, self._set_default_pane_split)
+
+    def _on_paned_configure(self, event) -> None:
+        """Fallback: ensure initial split happens when paned gets a real size."""
+        total = self._paned.winfo_height() if self._paned else 0
+        if total <= 40 or self._paned is None:
+            return
+
+        # Enforce minimum bottom height so footer/log không bị ép mất
+        try:
+            sash = self._paned.sashpos(0)
+        except tk.TclError:
+            sash = None
+        if sash is not None:
+            min_bottom = 120
+            bottom_h = total - sash
+            if bottom_h < min_bottom:
+                self._paned.sashpos(0, max(total - min_bottom, 0))
+
+        if not self._pane_split_set and event.height > 40:
+            self._set_default_pane_split()
 
     # -------------------------
     # Ports

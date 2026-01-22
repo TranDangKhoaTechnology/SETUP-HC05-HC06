@@ -1,0 +1,88 @@
+name: release-portable
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build portable (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r tools/requirements.txt
+
+      - name: Build onefile binaries (CLI + GUI)
+        run: |
+          CLI_NAME="hc-setup-wizard"
+          GUI_NAME="hc-setup-gui"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            pyinstaller --onefile --noconsole --name $GUI_NAME tools/hc_setup_gui.py
+            pyinstaller --onefile --name $CLI_NAME tools/hc_setup_wizard.py
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            pyinstaller --onefile --windowed --name $GUI_NAME tools/hc_setup_gui.py
+            pyinstaller --onefile --name $CLI_NAME tools/hc_setup_wizard.py
+          else
+            pyinstaller --onefile --name $GUI_NAME tools/hc_setup_gui.py
+            pyinstaller --onefile --name $CLI_NAME tools/hc_setup_wizard.py
+          fi
+
+      - name: Package portable bundle
+        env:
+          BUNDLE_NAME: ${{ format('hc_setup_tools-{0}.zip', matrix.os) }}
+        run: |
+          mkdir -p portable_dist
+          CLI_NAME="hc-setup-wizard"
+          GUI_NAME="hc-setup-gui"
+          CLI_BIN="dist/${CLI_NAME}"
+          GUI_BIN="dist/${GUI_NAME}"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            CLI_BIN="${CLI_BIN}.exe"
+            GUI_BIN="${GUI_BIN}.exe"
+          fi
+
+          cp "$CLI_BIN" "$GUI_BIN" portable_dist/
+          cp tools/portable/run_windows.bat tools/portable/run_macos_linux.sh tools/portable/README_PORTABLE.md portable_dist/
+          chmod +x portable_dist/run_macos_linux.sh || true
+          chmod +x portable_dist/hc-setup-* || true
+
+          python - <<'PY'
+import os, zipfile
+bundle = os.environ["BUNDLE_NAME"]
+dist_dir = "portable_dist"
+with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
+    for name in os.listdir(dist_dir):
+        zf.write(os.path.join(dist_dir, name), arcname=name)
+PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ format('hc_setup_tools-{0}', matrix.os) }}
+          path: ${{ format('hc_setup_tools-{0}.zip', matrix.os) }}
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ format('hc_setup_tools-{0}.zip', matrix.os) }}

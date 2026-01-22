@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Bản quyền (c) 2026 Trần Đăng Khoa (TranDangKhoaTechnology).
+# Phát hành theo MIT License; xem README.md và LICENSE để biết chi tiết.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

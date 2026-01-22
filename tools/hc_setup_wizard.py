@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Bản quyền (c) 2026 Trần Đăng Khoa (TranDangKhoaTechnology).
+# Phát hành theo MIT License; xem README.md và LICENSE để biết chi tiết.
 """
 HC-05 / HC-06 auto-setup wizard (CLI) + auto pair master/slave.
 

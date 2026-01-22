@@ -197,4 +197,4 @@ pyinstaller --onefile --name hc-setup-wizard tools/hc_setup_wizard.py
 
 ## Bản quyền & License
 
-Copyright (c) 2026 **TranDangKhoaTechnology**.
+Bản quyền 2026 **Trần Đăng Khoa** (TranDangKhoaTechnology). Tài liệu và mã nguồn trong repo này được phát hành theo MIT License; xem `LICENSE` để biết chi tiết.

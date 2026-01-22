@@ -18,3 +18,7 @@ No Python install needed. Steps:
 Notes:
 - After changing baud, reopen the port at the new speed to keep issuing AT commands.
 - Some HC-06 firmwares use different BAUD mappings; if `AT+BAUDx` fails, try another common baud or configure manually.
+
+## Bản quyền
+
+Bản quyền 2026 **Trần Đăng Khoa** (TranDangKhoaTechnology). Phần mềm và hướng dẫn này sử dụng MIT License; xem `LICENSE` trong thư mục gốc để biết điều khoản đầy đủ.

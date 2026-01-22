@@ -1,4 +1,6 @@
 @echo off
+rem Bản quyền (c) 2026 Trần Đăng Khoa (TranDangKhoaTechnology).
+rem Phát hành theo MIT License; xem README.md và LICENSE để biết chi tiết.
 setlocal enabledelayedexpansion
 
 rem Runner for the portable hc-setup-wizard.exe build (falls back to old name).
